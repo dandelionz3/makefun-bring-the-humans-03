@@ -25,7 +25,13 @@ const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
 const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
 const PLACEHOLDER = 'https://www.tiktok.com/@<handle>/video/<id>';
-const VIDEO_URL = /^https:\/\/(www\.)?tiktok\.com\/@[^/]+\/video\/\d+\/?$/;
+// Full TikTok video page, with the handle and video id captured so both can
+// be checked below. A handle follows TikTok's own rules: 2-24 characters,
+// letters/digits/underscore/period only, no leading or trailing period.
+// A video id must be at least 10 digits (real ones are 19), so a typo like
+// /video/123 is refused instead of slipping through as "\d+".
+const VIDEO_URL = /^https:\/\/(www\.)?tiktok\.com\/@([^/]+)\/video\/(\d+)\/?$/;
+const HANDLE_CHARS = /^[A-Za-z0-9_.]+$/;
 
 const source = join(BOT_DIR, 'VIDEO.json');
 let url: unknown;
@@ -45,12 +51,31 @@ if (url === PLACEHOLDER) {
     'VIDEO.json still holds the placeholder: post the ad on TikTok, ' +
     'then replace the placeholder with the video\'s address before submitting.',
   );
-} else if (!VIDEO_URL.test(url)) {
-  console.error(
-    `VIDEO.json does not name a TikTok video page: ${url}\n` +
-    'Use a full address like https://www.tiktok.com/@<handle>/video/<id>.',
-  );
-  process.exit(1);
+} else {
+  const match = VIDEO_URL.exec(url);
+  if (!match) {
+    console.error(
+      `VIDEO.json does not name a TikTok video page: ${url}\n` +
+      'Use a full address like https://www.tiktok.com/@<handle>/video/<id>.',
+    );
+    process.exit(1);
+  }
+  const handle = match[2];
+  const videoId = match[3];
+  if (
+    handle.length < 2 ||
+    handle.length > 24 ||
+    !HANDLE_CHARS.test(handle) ||
+    handle.startsWith('.') ||
+    handle.endsWith('.')
+  ) {
+    console.error(`VIDEO.json handle is not a valid TikTok handle: @${handle}`);
+    process.exit(1);
+  }
+  if (videoId.length < 10) {
+    console.error(`VIDEO.json video id looks too short: ${videoId}`);
+    process.exit(1);
+  }
 }
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
